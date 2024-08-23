@@ -4,89 +4,45 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include "server.h"
 
 #define PORT 8080
 #define BUFFER_SIZE 1024
 
-/*
- *  -> Considerações sobre o código:
- *
- *    0. Esse código foi feito com intuito meramente recreativo, então sinta-se
- *    convidado a aprimora-lo e fazer com que ele fique algo mais profissional.
- *
- *    1. Vi essa ideia de comentar o código dessa forma no github enquanto procurava
- *    material de referência e achei genial. Dito isso, esse código deve ficar
- *    semelhante a uma bíblia de tanto comentário.
- *
- *    2. O que são File Descriptors (fd):
- *    File descriptors (FD) são números inteiros que o sistema operacional utiliza
- *    para representar e gerenciar recursos de entrada/saída, como arquivos, sockets,
- *    pipes e dispositivos. Eles atuam como ponteiros abstratos que permitem que
- *    programas acessem e manipulem esses recursos de forma unificada.
- */
+Server server_constructor(int domain, int service, int protocol, unsigned long interface, int port, int backlog, void(*launch)(Server *))
+{
+    Server server;
 
-int main(){
-  int server_fd; //<- Variavel usada para genereciar a entrada e saida de dados pelo soquete.
+    server.domain = domain; 
+    server.service = service; 
+    server.protocol = protocol; 
+    server.interface = interface;
+    server.port = port; 
+    server.backlog = backlog;
+    server.launch = launch;
 
-  /* Cria uma variável `srv_addr` que armazena um endereço de socket IPv4.
-   * .sin_family = AF_INET -> Indica que o endereco do soquete é um IPv4.
-   * .sin_port = htons(PORT) -> Converte o número da porta de 'Host Byte Order' para 'Network Byte Order'
-   * .sin_addr.s_addr: INADDR_ANY -> Vincula o soquete a todas as interfaces de rede disponíveis na máquina.
-   */
-  struct sockaddr_in server_address = {
-    AF_INET,
-    htons(PORT),
-    INADDR_ANY
-  };
+    server.address.sin_family = domain; 
+    server.address.sin_port = htons(port);
+    server.address.sin_addr.s_addr = htonl(interface);
 
-  /*
-   * -> Gepeto: Um buffer é uma área de memória temporária usada para armazenar dados
-   *    enquanto eles são transferidos de uma parte do programa para outra, ou entre
-   *    um programa e um dispositivo de entrada/saída.
-   */
-  char buffer[BUFFER_SIZE] = {0};
-  const char *response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello, World!";
-
-  /*
-   *
-   */
-  if((server_fd  = socket(AF_INET, SOCK_STREAM, 0)) < 0){
-    perror("Criação do soquete falhou");
-    exit(EXIT_FAILURE);
-  }
-
-  if(bind(server_fd, (struct sockaddr *)&server_address, sizeof(server_address)) < 0){
-    perror("Bind falhou");
-    exit(EXIT_FAILURE);
-  }
-
-  if((listen(server_fd, 10) < 0)){
-    perror("Listen falhou");
-    exit(EXIT_FAILURE);
-  }
-
-  printf("Servidor rodando na porta %d\n", PORT);
-
-  while (1)
-  {
-    printf("\tEsperando clientes se conectarem...\n");
-
-    struct sockaddr_in client_addr;
-    int client_addr_len = sizeof(client_addr);
-
-    int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_addr_len);
-
-    if (client_fd == -1)
+    server.socket = socket(domain, service, protocol);
+    if(server.socket == 0)
     {
-      perror("Falha na conexão com o cliente");
+      perror("Erro ao se conectar com o soquete\n");
       exit(EXIT_FAILURE);
     }
 
-    read(client_fd, buffer, BUFFER_SIZE);
-    printf("Requisição recebida com sucesso!");
+    if(bind(server.socket, (struct serveraddr*)&server.address, sizeof(server.address)) < 0)
+    {
+      perror("Erro ao bindar\n");
+      exit(EXIT_FAILURE);
+    }
 
-    write(client_fd, response, strlen(response));
-    close(client_fd);
-  }
+    if(listen(server.socket, server.backlog) < 0)
+    {
+      perror("Erro ao escutar\n");
+      exit(EXIT_FAILURE);
+    }
 
+    return server;
 }
